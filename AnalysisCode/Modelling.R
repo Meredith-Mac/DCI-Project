@@ -10,6 +10,10 @@ library(ggsurvfit)
 #first, load in data
 CalfDieBefore2<-read.csv("Final-sample.csv")
 
+###Don't need to run, checks how many cases are event
+Event<-CalfDieBefore2%>%
+  filter(EventCensored == "1")
+
 ##################################################################################################### 
 ################################# *** !!! SELECTED MODEL !!! *** ###########################################################
 Model<-coxme(Surv(TimeToEvent, EventCensored) ~ CalfAgeDeathCategories + MomAgeBirth + Season + (1 | Mother.ID), data = CalfDieBefore2)
@@ -19,6 +23,11 @@ print(Model)
 ExSeason<-coxme(Surv(TimeToEvent, EventCensored) ~ CalfAgeDeathCategories + MomAgeBirth + (1 | Mother.ID), data = CalfDieBefore2)
 
 print(ExSeason)
+
+### check proportional hazards assumption
+test <- cox.zph(Model)
+test
+
 ################################# !!! SELECTED PLOT !!!  ###########################################################  
 KMPlot<-surv_fit(Surv(TimeToEvent, EventCensored) ~ CalfAgeDeathCategories, data = CalfDieBefore2)
 
@@ -37,9 +46,10 @@ font.x = c(16, "plain", "black"), font.y = c(16, "plain", "black"),
 font.tickslab = c(10, "plain", "black"), xlim = NULL, ylim = NULL,
 legend = c(0.8, 0.3), legend.title = "Calf age at death:", 
 legend.labs = c("under 3 months", "3-12 months", "12-24 months"), 
-font.legend = c(10,"plain", "black"), 
+font.legend = c(16,"plain", "black"), 
 ggtheme = ggplot2::theme_classic())
 
+print(OGPlot)
 
 #interesting to see risk table
 p<-survfit2(Surv(TimeToEvent, EventCensored) ~ CalfAgeDeathCategories, data = CalfDieBefore2) %>%
@@ -75,4 +85,6 @@ ggsurvplot(SeasonPlot, data = CalfDieBefore2, fun = "event", color = NULL, palet
            legend.labs = c("in-season morality", "out-of-season mortality"), 
            font.legend = c(10,"plain", "black"), 
            ggtheme = ggplot2::theme_classic())
+
+
            
