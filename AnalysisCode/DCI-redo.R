@@ -39,8 +39,8 @@ Matrilines$Death.Date<-ymd(Matrilines$Death.Date)
 Matrilines$NextCalfBDay<-ymd(Matrilines$NextCalfBDay)
 
 
-# read in life history for mother, rename columns, and correct date formats
-Mom_life<-read.csv(file="Life-hist.csv", header=T, sep=",", na.strings= "") %>%
+# read in another copy of life history for mother, rename columns, and correct date formats
+Mom_life<-read.csv(file="./RawData/Life-hist.csv", header=T, sep=",", na.strings= "") %>%
   dplyr::select(Dolphin.ID,
                 Dolphin.Name, 
                 Birth.Date,
@@ -80,20 +80,22 @@ DBISample<-Mat_join %>%
                      
 
 # Here, write csv which is required to examine sighting gaps among the moms in the sample
-write.csv(DBISample, "mort_sample.csv")
+write.csv(DBISample, "./IntermediateData/mort_sample.csv")
 
 ################################################################################################
 ############## PAUSE - go to "Sighting-gaps-moms.R" to generate list of females who make the cut
-Intervals<- read.csv(file="interval-two.csv", header=T, sep=",", strip.white=T, na.strings= "") %>%
+Intervals<- read.csv(file="./IntermediateData/interval-two.csv", header=T, sep=",", strip.white=T, na.strings= "") %>%
   dplyr::select(Dolphin.Name,
                 Gap,
                 ObsCount)
 
-# filter DCI sample to calves whose mothers meet the 2yr sighting gap requirements
-# 173 intervals with new approach, 3 yr gap-- 108 moms (two year gap 173 intervals, 105 moms)
-Sample<-DBISample %>%
-  filter(Dolphin.Name %in% Intervals$Dolphin.Name)
 
+# filter DCI sample to calves whose mothers meet the 2yr sighting gap requirements
+# OLD 173 intervals with new approach, 3 yr gap-- 108 moms (two year gap 173 intervals, 105 moms)
+# New (30-Mar-2025 158 intervals )
+Sample<- left_join(DBISample, Intervals, by = c("Dolphin.Name" = "Dolphin.Name")) %>%
+  filter(Dolphin.Name %in% Intervals$Dolphin.Name)
+  
 
 # make CalfAgeDeath, TimeToNextBirth, and MomAgeAtFirstBirth years not days
 # create column for event/censored - after the "first calf" died, did she have another?
@@ -101,6 +103,8 @@ Sample<-DBISample %>%
     # NOTE: This sample excludes moms/kids who have the same assigned death date so TimeToEvent = 0
 # create age categories
 # create columns for age categories (binary)
+# remove calves w/ age death >2yrs
+# FinalSample is 150 intervals
 FinalSample<-Sample %>%
   mutate(Present = today()) %>%
   mutate(CalfAgeDeathYrs = CalfAgeDeath/365.25) %>%
@@ -124,16 +128,12 @@ FinalSample<-Sample %>%
   mutate(c.Calf.1y.to.2y = ifelse(CalfAgeDeathCategories == "c.Calf.1y.to.2y", 1, 0)) %>%
   mutate(d.Calf.2y.to.3y = ifelse(CalfAgeDeathCategories == "d.Calf.2y.to.3y", 1, 0)) %>%
 
-
-  #### Not sure if we want to run this... probably, 2-3 range was messing up the model
-  ## 2025 Meredith says yes
-#remove calves w/ age death >2yrs... 162 intervals
   filter(CalfAgeDeath < 730.5) 
 
-# 101 females
+# 101 females, 150 intervals
 Finalmom<-unique(FinalSample$Mother.ID)
 
-write.csv(FinalSample, "C:/Users/mmacq/OneDrive/Documents/RStuff/SBDP/DCI-Project/DCI-Project/RawData/Final-sample.csv")
+write.csv(FinalSample, "C:/Users/mmacq/OneDrive/Documents/RStuff/SBDP/DCI-Project/DCI-Project/IntermediateData/Final-sample.csv")
 
 ### Summaries for viewing
 Summary<-FinalSample%>%
@@ -158,6 +158,74 @@ Newborn<-FinalSample%>%
   filter(EventCensored == 1) %>%
   filter(CalfAgeDeathCategories == "a.Calf.under.3mo")
   
-  
 plot(Newborn$DeathMonth, Newborn$TimeToEvent)
 
+Janet<-FinalSample%>%
+  filter(Birth.Date.Primary.Assigner == "JM")
+
+
+# Calculate authorship contributions
+# JM 50%, DIC 10.7%, EK 8%
+BirthDateCredit <- FinalSample %>%
+  group_by(Birth.Date.Primary.Assigner)%>% 
+  add_count(Birth.Date.Primary.Assigner) %>%
+  filter(!is.na(Birth.Date.Primary.Assigner)) %>%
+ mutate(Percent = (n/149)*100) # 150 birth dates in the sample, 1 assigner is NA
+
+# JM 33%, DIC 22%, VF 16%, CCC and ERJ 11%, MMQ 5%
+BirthDateLast5 <- FinalSample %>%
+  filter(Birth.Date >= "2020-01-01") %>% 
+  filter(!is.na(Birth.Date.Primary.Assigner)) %>% # 18 birth dates in last 5 years in the sample, none are NA
+  group_by(Birth.Date.Primary.Assigner)%>%
+  count() %>%
+  mutate(Percent = (n/18)*100)
+
+# JM 67% then next highest is VF with ~9%
+DeathDateCredit <- FinalSample %>%
+  group_by(Death.Date.Primary.Assigner) %>%
+  add_count(Death.Date.Primary.Assigner) %>%
+  filter(!is.na(Death.Date.Primary.Assigner)) %>% #146 death dates in sample, 4 are NA
+mutate(Percent = (n/146)*100) 
+  
+# VF 42%, CCC 32%, JM and DIC have next highest contribution 10%, then MMQ 5%
+DeathDateLast5 <- FinalSample %>%
+  filter(Death.Date >= "2020-01-01") %>% 
+  filter(!is.na(Death.Date.Primary.Assigner)) %>% # 19 death dates in last 5 years in the sample, none are NA
+  group_by(Death.Date.Primary.Assigner)%>%
+  count() %>%
+  mutate(Percent = (n/19)*100)
+
+# JM 41%, DIC 15%, EK 8%
+NextCalfCredit <- FinalSample %>%
+  group_by(NextCalfBDayAssigner) %>%
+  add_count(NextCalfBDayAssigner) %>%
+  filter(!is.na(NextCalfBDay)) %>% #117 next calf bdays in sample, so 33 are NA
+  mutate(Percent = (n/117)*100) 
+
+#JM 30%, DIC 26%, VF 17%, CCC 13%, MMQ 8%, ERJ 4%
+NextCalfLast5 <- FinalSample %>%
+  filter(NextCalfBDay >= "2020-01-01") %>% 
+  filter(!is.na(NextCalfBDayAssigner))  %>% # 23 next calf bdays in last 5 years in the sample 
+  group_by(NextCalfBDayAssigner)%>%
+  count() %>%
+  mutate(Percent = (n/23)*100)
+  
+
+###### birthdays pooled --- prob not necessary
+
+Bdays <- BirthDateCredit%>%
+  select(Birth.Date.Primary.Assigner,
+         n)
+
+NextBday <- NextCalfCredit %>%
+  select(NextCalfBDayAssigner,
+         n)
+
+# JM 46%, DIC 12%, EK 8%
+allBdays <- left_join(Bdays, NextBday, by = c("Birth.Date.Primary.Assigner" = "NextCalfBDayAssigner"))%>%
+  mutate(n.y = replace(n.y,is.na(n.y),0)) %>%
+  mutate(TotalBdays = n.x + n.y) %>%
+  unique()%>%
+  mutate(Percent = (TotalBdays/266)*100)
+  
+  
